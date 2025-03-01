@@ -58,6 +58,10 @@ jobs:
               sudo usermod -aG docker $USER
             fi
 
+            # Add the user to the Docker group to avoid permission issues
+            sudo usermod -aG docker $USER
+            newgrp docker <<EOF
+
             # Stop and remove any existing container
             docker stop my-python-app || true
             docker rm my-python-app || true

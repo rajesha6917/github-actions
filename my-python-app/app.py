@@ -37,7 +37,7 @@ def home():
     </head>
     <body>
         <div class="container">
-            <h1>🚀 Welcome to Our Flask App! 🎉</h1>
+            <h1>🚀 Welcome to santa App! 🎉</h1>
             <p>Thank you for visiting. Stay tuned for more updates.</p>
         </div>
     </body>

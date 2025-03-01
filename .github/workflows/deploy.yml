@@ -45,13 +45,21 @@ jobs:
             IMAGE_TAG=${{ env.IMAGE_TAG }}
             REPO_URL=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-python-app
 
-            # Install AWS CLI if not present
-            if ! command -v aws &> /dev/null; then
-              echo "AWS CLI not found, installing..."
+            # Install unzip if not present
+            if ! command -v unzip &> /dev/null; then
+              echo "Unzip not found, installing..."
               sudo apt update -y
-              sudo apt install -y awscli
+              sudo apt install -y unzip
             fi
 
+            # Install AWS CLI manually
+            if ! command -v aws &> /dev/null; then
+              echo "AWS CLI not found, installing manually..."
+              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+              unzip awscliv2.zip
+              sudo ./aws/install
+            fi
+            
             # Install Docker if not present
             if ! command -v docker &> /dev/null; then
               echo "Docker not found, installing..."

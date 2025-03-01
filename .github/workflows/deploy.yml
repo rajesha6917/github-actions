@@ -42,45 +42,60 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            IMAGE_TAG=${{ env.IMAGE_TAG }}
-            REPO_URL=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-python-app
+              set -e  # Exit on error
 
-            # Install unzip if not present
-            if ! command -v unzip &> /dev/null; then
-              echo "Unzip not found, installing..."
+              IMAGE_TAG=${{ env.IMAGE_TAG }}
+              REPO_URL=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-python-app
+
+              echo "✅ Updating package list..."
               sudo apt update -y
-              sudo apt install -y unzip
-            fi
 
-            # Install AWS CLI manually
-            if ! command -v aws &> /dev/null; then
-              echo "AWS CLI not found, installing manually..."
-              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-              unzip awscliv2.zip
-              sudo ./aws/install
-            fi
-            
-            # Install Docker if not present
-            if ! command -v docker &> /dev/null; then
-              echo "Docker not found, installing..."
-              sudo apt update -y
-              sudo apt install -y docker.io docker-compose
-              sudo systemctl enable docker
-              sudo systemctl start docker
-            fi
+              # Install unzip if not present
+              if ! command -v unzip &> /dev/null; then
+                echo "📦 Installing unzip..."
+                sudo apt install -y unzip
+              fi
 
-            # Add user to Docker group (avoids permission issues)
-            sudo usermod -aG docker $USER
+              # Install AWS CLI manually if not installed
+              if ! command -v aws &> /dev/null; then
+                echo "📦 Installing AWS CLI..."
+                curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                unzip -q awscliv2.zip
+                sudo ./aws/install
+                rm -rf awscliv2.zip aws/
+              fi
+              echo "✅ AWS CLI Version: $(aws --version)"
 
-            # Authenticate with AWS ECR (Use sudo -i to ensure correct user session)
-            sudo -i aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | sudo -i docker login --username AWS --password-stdin $REPO_URL
+              # Install Docker if not installed
+              if ! command -v docker &> /dev/null; then
+                echo "📦 Installing Docker..."
+                sudo apt install -y docker.io docker-compose
+                sudo systemctl enable docker
+                sudo systemctl start docker
+              fi
+              echo "✅ Docker Version: $(docker --version)"
 
-            # Stop and remove existing container
-            sudo docker stop my-python-app || true
-            sudo docker rm my-python-app || true
+              # Ensure user is added to the Docker group
+              if ! groups $USER | grep -q '\bdocker\b'; then
+                echo "🔄 Adding user to Docker group..."
+                sudo usermod -aG docker $USER
+                newgrp docker  # Apply changes immediately
+              fi
 
-            # Pull the new image
-            sudo docker pull $REPO_URL:$IMAGE_TAG
+              # Authenticate with AWS ECR
+              echo "🔑 Logging into AWS ECR..."
+              aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin $REPO_URL
 
-            # Run the container
-            sudo docker run -d -p 80:5000 --name my-python-app $REPO_URL:$IMAGE_TAG
+              # Stop and remove existing container if running
+              echo "🛑 Stopping and removing old container..."
+              docker ps -q --filter "name=my-python-app" | grep -q . && docker stop my-python-app && docker rm my-python-app || true
+
+              # Pull the new image from AWS ECR
+              echo "📥 Pulling new image: $REPO_URL:$IMAGE_TAG"
+              docker pull $REPO_URL:$IMAGE_TAG
+
+              # Run the updated container
+              echo "🚀 Running new container..."
+              docker run -d -p 80:5000 --name my-python-app --restart unless-stopped $REPO_URL:$IMAGE_TAG
+
+              echo "✅ Deployment complete!"

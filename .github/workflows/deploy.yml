@@ -35,23 +35,36 @@ jobs:
 
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
-      - name: Deploy Image to EC2
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            IMAGE_TAG=${{ env.IMAGE_TAG }}
-            REPO_URL=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-python-app
-
-            # Authenticate with ECR
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin $REPO_URL
-
-            # Stop and remove existing container
-            docker stop my-python-app || true
-            docker rm my-python-app || true
-
-            # Pull the new image and run the container
-            docker pull $REPO_URL:$IMAGE_TAG
-            docker run -d -p 80:5000 --name my-python-app $REPO_URL:$IMAGE_TAG
+          - name: Deploy Image to EC2
+          uses: appleboy/ssh-action@master
+          with:
+            host: ${{ secrets.EC2_HOST }}
+            username: ${{ secrets.EC2_USER }}
+            key: ${{ secrets.EC2_SSH_KEY }}
+            script: |
+              IMAGE_TAG=${{ env.IMAGE_TAG }}
+              REPO_URL=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-python-app
+        
+              # Authenticate with AWS ECR
+              aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin $REPO_URL
+        
+              # Ensure Docker is installed and running
+              if ! command -v docker &> /dev/null; then
+                echo "Docker not found, installing..."
+                sudo apt update -y
+                sudo apt install -y docker.io docker-compose
+                sudo systemctl enable docker
+                sudo systemctl start docker
+                sudo usermod -aG docker $USER
+              fi
+        
+              # Stop and remove any existing container
+              docker stop my-python-app || true
+              docker rm my-python-app || true
+        
+              # Pull the new image
+              docker pull $REPO_URL:$IMAGE_TAG
+        
+              # Run the container (replace 5000 with your app's port if needed)
+              docker run -d -p 80:5000 --name my-python-app $REPO_URL:$IMAGE_TAG
+        
